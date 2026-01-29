@@ -90,37 +90,131 @@ def change_board_to_fen(board: list[list[str]], turn: str = "w", castling_rights
 
 def update_board_state(move: str, fen_string: str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") -> str:
     """
-    Executes a move (DOES NOT INCLUDE LEGITIMACY) and returns an updated fen string.
+    Executes a move and handles ALL the side effects (Castling, En Passant, Promotion, Rights Update).
 
     Args:
         move: a str in the format 'e2e4' (start_pos + end_pos)
-        fen_string: the current fen string, from which the next fen string will be generated. 
+        fen_string: the current fen string.
     Returns:
-        str: Updated fen string with the move successfully done. Automatically handles taking pieces.
+        str: The fully updated FEN string.
     """
     board = create_board(fen_string)
-
-    # Parse coordinates
-    current_position = change_notations(move[0:2])
-    new_position = change_notations(move[2:4])
-    
-    piece = base.get_piece_on_position(board, current_position)
-    # Just in case.
-    if piece is None:
-        return fen_string
-
-    # Empty the original position
-    board[current_position[0]][current_position[1]] = "+"
-
-    # Place piece in new position
-    board[new_position[0]][new_position[1]] = piece
-
-    # Update Metadata
     board_data = get_board_data(fen_string)
-    turn = "w" if board_data["turn"] == "b" else "b"
-    full_timer = int(board_data["full_timer"]) + 1
-
-    # TODO: Update en_passant targets and castling rights logic here later
     
-    updated_fen_string = change_board_to_fen(board, turn=turn, full_timer=full_timer)
-    return updated_fen_string
+    # Parse Coordinates
+    start_str, end_str = move[0:2], move[2:4]
+    start_pos = change_notations(start_str)
+    end_pos = change_notations(end_str)
+    
+    piece = base.get_piece_on_position(board, start_pos)
+    if piece is None or piece == "+": 
+        return fen_string # Just in case
+    
+    p_type = piece.lower()
+    color = "w" if piece.isupper() else "b"
+    
+    # Castling
+    # We detect a castle if the King moves more than 1 column.
+    if p_type == 'k' and abs(start_pos[1] - end_pos[1]) > 1: # Abs always gives the magnitude or just the positive value
+        # King is at (7, 4) moving to (7, 6) [Kingside]
+        if end_pos[1] > start_pos[1]: # Kingside
+            rook_col, rook_dest_col = 7, 5 # h-file to f-file
+        else: # Queenside
+            rook_col, rook_dest_col = 0, 3 # a-file to d-file
+            
+        # Move the Rook
+        row = start_pos[0]
+        rook_piece = board[row][rook_col]
+        board[row][rook_col] = "+"
+        board[row][rook_dest_col] = rook_piece
+
+    # En Passant
+    # If a pawn moves diagonally into an empty square, it must be En Passant.
+    if p_type == 'p':
+        if start_pos[1] != end_pos[1] and board[end_pos[0]][end_pos[1]] == "+":
+            # The victim is 'behind' the landing spot. What is this move, some anime? Omae wa mou shindeiru?!
+            # White captures 'Up' (-1), so victim is 'Down' (+1).
+            victim_dir = 1 if color == 'w' else -1
+            board[end_pos[0] + victim_dir][end_pos[1]] = "+"
+
+    # Moving the actual pawn
+    board[start_pos[0]][start_pos[1]] = "+"
+    board[end_pos[0]][end_pos[1]] = piece
+
+    # Pawn promotion (This piece is really in his own anime)
+    # If a pawn hits the last rank
+    if p_type == 'p':
+        if (color == 'w' and end_pos[0] == 0) or (color == 'b' and end_pos[0] == 7):
+            # Auto-Promote to Queen for now
+            board[end_pos[0]][end_pos[1]] = "Q" if color == 'w' else "q"
+
+
+    # Fen metadata updates
+    current_rights = str(board_data["castling_rights"])
+    new_en_passant = "-"
+    
+    # Updating Castling Rights
+    # If King moves, lose all rights for that color
+    if p_type == 'k':
+        if color == 'w':
+            current_rights = current_rights.replace("K", "").replace("Q", "")
+        else:
+            current_rights = current_rights.replace("k", "").replace("q", "")
+            
+    # If Rook moves, lose rights for that side
+    # White Rooks: a1 (7,0), h1 (7,7). Black Rooks: a8 (0,0), h8 (0,7)
+    elif p_type == 'r':
+        if start_pos == (7, 0):
+            current_rights = current_rights.replace("Q", "")
+        if start_pos == (7, 7): 
+            current_rights = current_rights.replace("K", "")
+        if start_pos == (0, 0):
+            current_rights = current_rights.replace("q", "")
+        if start_pos == (0, 7): 
+            current_rights = current_rights.replace("k", "")
+
+    # If Rook DIES, lose rights for that side
+    if end_pos == (0, 0):
+        current_rights = current_rights.replace("q", "")
+    if end_pos == (0, 7):
+        current_rights = current_rights.replace("k", "")
+    if end_pos == (7, 0):
+        current_rights = current_rights.replace("Q", "")
+    if end_pos == (7, 7):
+        current_rights = current_rights.replace("K", "")
+    
+    if current_rights == "":
+        current_rights = "-" # Thats just how fen strings work.
+
+
+    # Setting En Passant Target
+    # If a pawn moves 2 squares, the space in between is the target.
+    if p_type == 'p' and abs(start_pos[0] - end_pos[0]) == 2:
+        skipped_row = (start_pos[0] + end_pos[0]) // 2 # Is always either 3 or 6
+        # Convert back to notation (e.g., e3)
+        col_char = chr(start_pos[1] + 97) # chr is the opposite of ord()
+        rank_num = 8 - skipped_row
+        new_en_passant = f"{col_char}{rank_num}"
+
+
+    # Updating Timers & Turn
+    next_turn = "w" if board_data["turn"] == "b" else "b"
+    
+    # Half move clock resets on Pawn Move or Capture. Otherwise +1.
+    is_capture = (base.get_piece_on_position(create_board(fen_string), end_pos) != "+") # Check old board for capture. The new board has already changed so we can't check there.
+    if p_type == 'p' or is_capture:
+        half_timer = 0
+    else:
+        half_timer = int(board_data["half_timer"]) + 1
+
+    full_timer = int(board_data["full_timer"]) + 1 if next_turn == "w" else int(board_data["full_timer"])
+
+    
+    return change_board_to_fen(
+        board, 
+        turn=next_turn, 
+        castling_rights=current_rights,
+        en_passant=new_en_passant,
+        half_timer=half_timer,
+        full_timer=full_timer
+    )

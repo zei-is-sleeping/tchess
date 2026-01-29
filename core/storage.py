@@ -1,5 +1,4 @@
 import pickle
-import os
 
 HISTORY_FILE = "data/history.dat"
 
@@ -7,9 +6,6 @@ def init_history(initial_fen: str):
     """
     Resets the history file and saves the starting position.
     """
-    # Ensure data directory exists
-    os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
-    
     # Overwrite file with initial state list
     with open(HISTORY_FILE, "wb") as f:
         pickle.dump([initial_fen], f)
@@ -18,7 +14,6 @@ def save_snapshot(fen: str):
     """
     Appends the new FEN state to the history.
     """
-    # Read current history
     try:
         with open(HISTORY_FILE, "rb") as f:
             history = pickle.load(f)
@@ -48,7 +43,7 @@ def undo_move() -> str | None:
     # Remove the last move
     history.pop()
 
-    # Save truncated history
+    # Save new history
     with open(HISTORY_FILE, "wb") as f:
         pickle.dump(history, f)
 

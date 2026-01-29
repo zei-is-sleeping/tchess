@@ -10,13 +10,13 @@ from core import storage, ai
 # UI
 from ui import renderer, menu
 
-init()
+init() # For colorama
 
 def main():
-    # 1. Main Menu
+    # Main Menu
     config = menu.show_main_menu()
     
-    # 2. Game Init
+    # Game Init
     start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     storage.init_history(start_fen)
     current_fen = start_fen
@@ -28,10 +28,10 @@ def main():
         # If Player is White, AI is Black.
         ai_color = 'b' if config['color'] == 'w' else 'w'
         try:
-            engine = ai.Stockfish(config['difficulty'])
+            engine = ai.Stockfish(int(config['difficulty']))
         except FileNotFoundError as e:
-            print(f"\nCRITICAL ERROR: {e}")
-            input("Press Enter to exit...")
+            print(f"\nNo stockfish found :(: {e}")
+            _ = input("Press Enter to exit...")
             sys.exit()
 
     # UI State
@@ -50,7 +50,7 @@ def main():
             board, turn, board_data["en_passant"], board_data["castling_rights"]
         )
 
-        # Check for King Check (Red Highlight)
+        # Check for King Check. We will use it to mark check position in renderer.
         check_pos = None
         if arbiter.is_king_in_check(board, turn):
             target = 'K' if turn == 'w' else 'k'
@@ -66,16 +66,16 @@ def main():
             highlights, error_pos, check_pos, last_move_coords, message
         )
         
-        # Reset transient state
+        # Reset the highlights
         highlights = []
         error_pos = None
         message = ""
 
         if game_status != "PLAYING":
-            renderer.get_player_input(turn) # Pause
+            renderer.get_player_input(turn)
             break
 
-        # --- AI TURN ---
+        # AI TURN
         if config['mode'] == 'pve' and turn == ai_color:
             print(f"  AI is thinking...")
             try:
@@ -92,9 +92,10 @@ def main():
             except Exception as e:
                 message = f"AI Error: {e}"
 
-        # --- HUMAN TURN ---
+        # HUMAN TURN
         user_input = renderer.get_player_input(turn)
 
+        # Helpful commands you can use.
         # 1. Quit
         if user_input.lower() in ['q', 'quit', 'exit']:
             break
@@ -135,7 +136,6 @@ def main():
                 message = "Out of bounds."
                 continue
 
-            # Validate
             legal_moves = arbiter.get_legal_moves(
                 board, start_pos, board_data["en_passant"], board_data["castling_rights"]
             )
@@ -145,7 +145,7 @@ def main():
                 storage.save_snapshot(current_fen)
                 last_move_coords = [start_pos, end_pos]
             else:
-                # Auto-Assist
+                # Auto-Assist if the player makes an illegal move
                 highlights = legal_moves
                 error_pos = start_pos
                 message = "Illegal move."

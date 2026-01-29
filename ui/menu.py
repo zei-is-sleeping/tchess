@@ -14,6 +14,7 @@ LOGO = r"""
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
+
 def show_main_menu():
     """
     Returns a dict: {'mode': 'pvp'|'pve', 'difficulty': 1-4, 'color': 'w'|'b'}

@@ -2,7 +2,7 @@ import os
 import shutil
 from colorama import Fore, Back, Style
 
-# --- CONFIGURATION ---
+# COLOR CONFIGURATION
 COLOR_LIGHT_SQ = Back.LIGHTBLACK_EX
 COLOR_DARK_SQ = Back.CYAN
 COLOR_HIGHLIGHT_MOVE = Back.GREEN
@@ -13,7 +13,7 @@ COLOR_HIGHLIGHT_LAST_MOVE = Back.MAGENTA # Purple for last move
 COLOR_WHITE_P = Fore.WHITE + Style.BRIGHT
 COLOR_BLACK_P = Fore.BLACK
 
-# WINDOWS SAFE MODE: Use Letters by default.
+# WINDOWS SAFE MODE: Use Letters by default. Can't expect windows to have shit.
 USE_ICONS = False 
 
 ICONS = {
@@ -30,6 +30,7 @@ LETTERS = {
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
+
 
 def get_graveyard(board):
     initial = {
@@ -52,6 +53,7 @@ def get_graveyard(board):
             graveyard[color].extend([symbols[piece]] * diff)
             
     return graveyard
+
 
 def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None, last_move=None):
     if highlights is None: highlights = []
@@ -110,6 +112,7 @@ def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None,
     lines.append(header)
     return lines
 
+
 def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_pos=None, check_pos=None, last_move=None, message=""):
     clear_screen()
     board_lines = generate_board_lines(board, highlights, error_pos, check_pos, last_move)
@@ -166,6 +169,7 @@ def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_p
         print(f"{padding_left}{b_line}{gap}{s_line}")
 
     print("\n")
+
 
 def get_player_input(turn_color):
     prompt_char = "❯"

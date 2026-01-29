@@ -5,13 +5,12 @@ def get_pseudo_legal_moves(board: list[list[str]], pos: tuple[int, int]) -> list
     Calculates all pseudo-legal moves for a pawn at a specific position.
     
     Includes:
-    - Single step forward (if empty)
-    - Double step forward (if at start and path empty)
-    - Diagonal captures (if enemy present)
+    - Single step forward
+    - Double step forward 
+    - Diagonal captures
     
     Does NOT include:
-    - En Passant (requires FEN metadata)
-    - Pin/Check checks (handled by Arbiter)
+    - En Passant
     
     Args:
         board: The 2D board list.

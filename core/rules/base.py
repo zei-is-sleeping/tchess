@@ -43,3 +43,41 @@ def is_enemy(board: list[list[str]], pos: tuple[int, int], color: str) -> bool:
     if ex_color is not None and ex_color != color:
         return True 
     return False
+
+
+def get_sliding_moves(board: list[list[str]], pos: tuple[int, int], directions: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """
+    Generic raycasting generator for sliding pieces (Rook, Bishop, Queen).
+    Args:
+        board: board list
+        pos: starting position (row, col)
+        directions: List of (row_change, col_change) tuples. 
+                    e.g. [(1, 0)] means 'Down'.
+    """
+    moves: list[tuple[int, int]] = []
+    start_color = str(get_piece_color(board, pos))
+    
+    for dr, dc in directions:
+        row, col = pos
+        
+        # Keep walking in this direction
+        while True:
+            row += dr
+            col += dc
+            target = (row, col)
+            
+            # 1. Check if the ray is leaking out
+            if not is_on_board(target):
+                break
+            
+            # 2. Check Obstacles
+            if is_friendly(board, target, start_color):
+                break # Blocked by friendly piece
+            
+            # 3. Valid Move
+            moves.append(target)
+            
+            if is_enemy(board, target, start_color):
+                break # Capture enemy, then stop (can't jump over)
+                
+    return moves

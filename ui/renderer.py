@@ -1,6 +1,5 @@
 import os
 import shutil
-import re
 from colorama import Fore, Back, Style
 
 # --- CONFIGURATION ---
@@ -9,11 +8,12 @@ COLOR_DARK_SQ = Back.CYAN
 COLOR_HIGHLIGHT_MOVE = Back.GREEN
 COLOR_HIGHLIGHT_ERROR = Back.RED
 COLOR_HIGHLIGHT_SRC = Back.YELLOW
+COLOR_HIGHLIGHT_LAST_MOVE = Back.MAGENTA # Purple for last move
 
 COLOR_WHITE_P = Fore.WHITE + Style.BRIGHT
 COLOR_BLACK_P = Fore.BLACK
 
-# WINDOWS SAFE MODE
+# WINDOWS SAFE MODE: Use Letters by default.
 USE_ICONS = False 
 
 ICONS = {
@@ -53,31 +53,20 @@ def get_graveyard(board):
             
     return graveyard
 
-def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None):
+def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None, last_move=None):
     if highlights is None: highlights = []
+    if last_move is None: last_move = []
+    
     lines = []
-    
-    # 7x3 Grid Configuration
-    # Width 7 is roughly 2.3x height 3, which creates a visual square 
-    # because terminal chars are tall.
-    # Top:    "       "
-    # Middle: "   P   "
-    # Bottom: "       "
-    
     symbols = ICONS if USE_ICONS else LETTERS
     
     # Header (File Labels)
-    # We need A, B, C to be centered on the 7-char tiles.
-    # The tiles start after 5 chars of padding (rank label).
-    # Tile center is index 3 (0-based) relative to tile start.
-    # Spacing between letters = 6 spaces.
-    # "     " + "   A      B      C..."
     gap = " " * 6
     header = "        " + gap.join("ABCDEFGH") + "   "
     lines.append(header)
     
     for r in range(8):
-        # We need 3 lines per Rank
+        # 3 lines per Rank
         line_top = f"     "   # Padding
         line_mid = f"  {8-r}  " # Rank Label
         line_bot = f"     "   # Padding
@@ -85,11 +74,17 @@ def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None)
         for c in range(8):
             piece_char = board[r][c]
             
-            # Background Color
-            bg = COLOR_LIGHT_SQ if (r + c) % 2 == 0 else COLOR_DARK_SQ
-            if check_pos == (r, c): bg = COLOR_HIGHLIGHT_ERROR
-            elif error_pos == (r, c): bg = COLOR_HIGHLIGHT_ERROR
-            elif (r, c) in highlights: bg = COLOR_HIGHLIGHT_MOVE
+            # Priority Color Logic
+            if check_pos == (r, c): 
+                bg = COLOR_HIGHLIGHT_ERROR
+            elif error_pos == (r, c): 
+                bg = COLOR_HIGHLIGHT_ERROR
+            elif (r, c) in highlights: 
+                bg = COLOR_HIGHLIGHT_MOVE
+            elif (r, c) in last_move:
+                bg = COLOR_HIGHLIGHT_LAST_MOVE
+            else:
+                bg = COLOR_LIGHT_SQ if (r + c) % 2 == 0 else COLOR_DARK_SQ
             
             # Foreground Color
             if piece_char == "+": fg = ""
@@ -98,16 +93,13 @@ def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None)
             
             symbol = symbols.get(piece_char, ' ')
             
-            # Construct the 3 parts of the tile
-            # 7 chars wide
-            padding = "   " # 3 spaces
+            # Construct Tile (7 chars wide)
+            padding = "   "
             
             # 1. Top
             line_top += f"{bg}{padding} {padding}{Style.RESET_ALL}"
-            
-            # 2. Middle (Symbol centered)
+            # 2. Middle
             line_mid += f"{bg}{padding}{fg}{symbol}{padding}{Style.RESET_ALL}"
-            
             # 3. Bottom
             line_bot += f"{bg}{padding} {padding}{Style.RESET_ALL}"
             
@@ -118,9 +110,9 @@ def generate_board_lines(board, highlights=None, error_pos=None, check_pos=None)
     lines.append(header)
     return lines
 
-def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_pos=None, check_pos=None, message=""):
+def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_pos=None, check_pos=None, last_move=None, message=""):
     clear_screen()
-    board_lines = generate_board_lines(board, highlights, error_pos, check_pos)
+    board_lines = generate_board_lines(board, highlights, error_pos, check_pos, last_move)
     graveyard = get_graveyard(board)
     
     # Stats Panel
@@ -137,6 +129,7 @@ def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_p
     
     if message:
         stats.append(f"{Fore.YELLOW}INFO:{Style.RESET_ALL}")
+        # Manual Wrap
         words = message.split()
         line = ""
         for w in words:
@@ -153,9 +146,8 @@ def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_p
     term_width = shutil.get_terminal_size().columns
     term_height = shutil.get_terminal_size().lines
     
-    # Calculate visual width (5 chars padding + 8*7 tiles = 61 chars)
-    board_width = 65 
-    total_content_width = board_width + 4 + 30
+    # Visual width estimation (Board ~65 chars + Gap 4 + Stats ~30)
+    total_content_width = 99
     
     padding_left = " " * max(0, (term_width - total_content_width) // 2)
     padding_top = max(0, (term_height - max_lines - 3) // 2)
@@ -166,11 +158,10 @@ def draw_game_state(board, turn, game_status="PLAYING", highlights=None, error_p
         if i < len(board_lines):
             b_line = board_lines[i]
         else:
-            b_line = " " * board_width
+            b_line = " " * 65 # Pad if board is shorter than stats (unlikely)
             
         s_line = stats[i] if i < len(stats) else ""
         
-        # Gap of 4 spaces
         gap = "    "
         print(f"{padding_left}{b_line}{gap}{s_line}")
 

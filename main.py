@@ -1,40 +1,58 @@
+import sys
 from colorama import init
 
-# Import Core
+# Core
 from core.board import create_board, update_board_state, get_board_data
 from core.rules import arbiter
 from core.utils import change_notations
-from core import storage
+from core import storage, ai
 
-# Import UI
-from ui import renderer
+# UI
+from ui import renderer, menu
 
 init()
 
 def main():
+    # 1. Main Menu
+    config = menu.show_main_menu()
+    
+    # 2. Game Init
     start_fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
     storage.init_history(start_fen)
     current_fen = start_fen
     
+    # AI Setup
+    engine = None
+    ai_color = None
+    if config['mode'] == 'pve':
+        # If Player is White, AI is Black.
+        ai_color = 'b' if config['color'] == 'w' else 'w'
+        try:
+            engine = ai.Stockfish(config['difficulty'])
+        except FileNotFoundError as e:
+            print(f"\nCRITICAL ERROR: {e}")
+            input("Press Enter to exit...")
+            sys.exit()
+
     # UI State
-    highlights = []  # Green squares
-    error_pos = None # Red square (illegal source)
-    message = ""     # Info text
+    highlights = []
+    error_pos = None
+    last_move_coords = [] # Tracks [start_pos, end_pos]
+    message = f"Mode: {config['mode'].upper()}"
 
     while True:
         board = create_board(current_fen)
         board_data = get_board_data(current_fen)
         turn = board_data["turn"]
         
-        # Check Game State
+        # Check Game Status
         game_status = arbiter.get_game_state(
             board, turn, board_data["en_passant"], board_data["castling_rights"]
         )
 
-        # Detect Check for UI Highlighting
+        # Check for King Check (Red Highlight)
         check_pos = None
         if arbiter.is_king_in_check(board, turn):
-            # Find King to paint him Red
             target = 'K' if turn == 'w' else 'k'
             for r in range(8):
                 for c in range(8):
@@ -45,22 +63,37 @@ def main():
         # Render
         renderer.draw_game_state(
             board, turn, game_status, 
-            highlights, error_pos, check_pos, message
+            highlights, error_pos, check_pos, last_move_coords, message
         )
         
-        # Reset transient UI state
+        # Reset transient state
         highlights = []
         error_pos = None
         message = ""
 
-        # Input
         if game_status != "PLAYING":
-            renderer.get_player_input(turn) # Just to pause
+            renderer.get_player_input(turn) # Pause
             break
 
-        user_input = renderer.get_player_input(turn)
+        # --- AI TURN ---
+        if config['mode'] == 'pve' and turn == ai_color:
+            print(f"  AI is thinking...")
+            try:
+                best_move = engine.get_best_move(current_fen)
+                if best_move:
+                    current_fen = update_board_state(best_move, current_fen)
+                    storage.save_snapshot(current_fen)
+                    
+                    # Update Last Move Highlight
+                    ai_start = change_notations(best_move[0:2])
+                    ai_end = change_notations(best_move[2:4])
+                    last_move_coords = [ai_start, ai_end]
+                    continue
+            except Exception as e:
+                message = f"AI Error: {e}"
 
-        # --- LOGIC ---
+        # --- HUMAN TURN ---
+        user_input = renderer.get_player_input(turn)
 
         # 1. Quit
         if user_input.lower() in ['q', 'quit', 'exit']:
@@ -68,67 +101,41 @@ def main():
         
         # 2. Undo
         if user_input.lower() in ['u', 'undo']:
-            prev_fen = storage.undo_move()
-            if prev_fen:
-                current_fen = prev_fen
-                message = "Undid last move."
-            else:
-                message = "Cannot undo further."
+            steps = 2 if config['mode'] == 'pve' else 1
+            for _ in range(steps):
+                prev = storage.undo_move()
+                if prev: current_fen = prev
+            message = "Undid move."
+            last_move_coords = [] # Clear highlight on undo
             continue
 
-        # 3. Help Command (?e2 or ?K)
+        # 3. Help
         if user_input.startswith("?"):
             query = user_input[1:]
-            
-            # Case A: Position (?e2)
+            # Help Position (?e2)
             if len(query) == 2 and query[1].isdigit():
                 try:
                     pos = change_notations(query)
-                    legal_moves = arbiter.get_legal_moves(
-                        board, pos, board_data["en_passant"], board_data["castling_rights"]
-                    )
-                    highlights = legal_moves
-                    if not legal_moves:
-                        error_pos = pos # Highlight piece red if stuck
-                        message = "No legal moves for this piece."
-                    else:
-                        message = f"Showing {len(legal_moves)} moves for {query}."
-                except:
-                    message = "Invalid coordinate."
-                continue
-            
-            # Case B: Piece Type (?N, ?K) (Bonus)
-            elif len(query) == 1:
-                # Find all pieces of this type and color
-                found = False
-                for r in range(8):
-                    for c in range(8):
-                        p = board[r][c]
-                        if p.upper() == query.upper() and \
-                           (('w' in turn and p.isupper()) or ('b' in turn and p.islower())):
-                            
-                            moves = arbiter.get_legal_moves(board, (r, c), board_data["en_passant"], board_data["castling_rights"])
-                            highlights.extend(moves)
-                            found = True
-                if not found:
-                    message = f"No active {query} found."
-                continue
+                    moves = arbiter.get_legal_moves(board, pos, board_data["en_passant"], board_data["castling_rights"])
+                    highlights = moves
+                    message = f"Found {len(moves)} legal moves."
+                except: message = "Invalid coord."
+            continue
 
         # 4. Move Execution
         if len(user_input) != 4:
-            message = "Invalid format. Use 'e2e4' or '?e2'."
+            message = "Invalid format."
             continue
 
         try:
             start_pos = change_notations(user_input[0:2])
             end_pos = change_notations(user_input[2:4])
             
-            # Bounds
-            if not (0 <= start_pos[0] < 8 and 0 <= start_pos[1] < 8):
+            if not (0 <= start_pos[0] < 8):
                 message = "Out of bounds."
                 continue
 
-            # Get Legal Moves for Source
+            # Validate
             legal_moves = arbiter.get_legal_moves(
                 board, start_pos, board_data["en_passant"], board_data["castling_rights"]
             )
@@ -136,11 +143,12 @@ def main():
             if end_pos in legal_moves:
                 current_fen = update_board_state(user_input, current_fen)
                 storage.save_snapshot(current_fen)
+                last_move_coords = [start_pos, end_pos]
             else:
-                # AUTO-ASSIST: Highlight valid moves on error
+                # Auto-Assist
                 highlights = legal_moves
                 error_pos = start_pos
-                message = "Illegal move! Valid moves highlighted."
+                message = "Illegal move."
                 
         except Exception as e:
             message = f"Error: {e}"

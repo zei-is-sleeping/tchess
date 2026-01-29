@@ -55,7 +55,7 @@ def get_sliding_moves(board: list[list[str]], pos: tuple[int, int], directions: 
                     e.g. [(1, 0)] means 'Down'.
     """
     moves: list[tuple[int, int]] = []
-    start_color = str(get_piece_color(board, pos))
+    color = str(get_piece_color(board, pos))
     
     for dr, dc in directions:
         row, col = pos
@@ -71,13 +71,13 @@ def get_sliding_moves(board: list[list[str]], pos: tuple[int, int], directions: 
                 break
             
             # 2. Check Obstacles
-            if is_friendly(board, target, start_color):
+            if is_friendly(board, target, color):
                 break # Blocked by friendly piece
             
             # 3. Valid Move
             moves.append(target)
             
-            if is_enemy(board, target, start_color):
+            if is_enemy(board, target, color):
                 break # Capture enemy, then stop (can't jump over)
                 
     return moves

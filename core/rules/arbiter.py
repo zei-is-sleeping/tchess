@@ -1,31 +1,32 @@
 from core.rules import base, pawn, rook, knight, bishop, queen, king
 
-def get_pseudo_moves(board: list[list[str]], pos: tuple[int, int]) -> list[tuple[int, int]]:
+def get_pseudo_moves(board: list[list[str]], pos: tuple[int, int], en_passant_target: str = "-", castling_rights: str = "-") -> list[tuple[int, int]]:
     """
     Collects all possible pseudo-legal moves on the board for one piece.
-    "Pseudo-legal" means it follows geometry (L-shapes, diagonals) but ignores 
-    King safety.
-
+    Also includes metadata like en_passant_target and castling_rights for respective moves to occur.
+    
     Args:
         board: The 2D board list.
         pos: The (row, col) tuple of the piece.
+        en_passant_target: The coordinate string (e.g., 'e3') or '-' from FEN.
+        castling_rights: The rights string (e.g., 'KQkq') from FEN.
     Returns: 
         A list of position coordinates [(r, c), ...].
     """
     piece_char = base.get_piece_on_position(board, pos)
     if not piece_char or piece_char == "+":
-        return []
+        return [] # Empty places obviously have no legal moves
         
     p_type = piece_char.lower()
     
-    if p_type == 'p': return pawn.get_pseudo_legal_moves(board, pos)
+    if p_type == 'p': return pawn.get_pseudo_legal_moves(board, pos, en_passant_target)
     if p_type == 'r': return rook.get_pseudo_legal_moves(board, pos)
     if p_type == 'n': return knight.get_pseudo_legal_moves(board, pos)
     if p_type == 'b': return bishop.get_pseudo_legal_moves(board, pos)
     if p_type == 'q': return queen.get_pseudo_legal_moves(board, pos)
-    if p_type == 'k': return king.get_pseudo_legal_moves(board, pos)
+    if p_type == 'k': return king.get_pseudo_legal_moves(board, pos, castling_rights)
     
-    return []
+    return [] # Just to keep the linter happy
 
 
 def is_square_under_attack(board: list[list[str]], pos: tuple[int, int], defender_color: str) -> bool:
@@ -122,37 +123,37 @@ def is_king_in_check(board: list[list[str]], color: str) -> bool:
     return is_square_under_attack(board, king_pos, color)
 
 
-def get_legal_moves(board: list[list[str]], pos: tuple[int, int]) -> list[tuple[int, int]]:
+def get_legal_moves(board: list[list[str]], pos: tuple[int, int], en_passant_target: str = "-", castling_rights: str = "-") -> list[tuple[int, int]]:
     """
     Returns the FINAL list of moves a piece can make.
-    
+
     Process:
     1. Get all pseudo-legal moves (geometry only).
     2. Simulate each move on a temporary board.
     3. Check if the move leaves the King in check.
     4. If King is safe, the move is Legal.
     5. Cry that this logic might be too heavy.
-
+    
     Args:
         board: The 2D board list.
-        pos: The starting position (row, col).
-
+        pos: The starting position.
+        en_passant_target: Metadata for pawn.
+        castling_rights: Metadata for king.
     Returns:
-        List of valid target tuples, [(row, col), ...].
+        List of valid target tuples.
     """
-    # Get raw geometry moves
-    pseudo_moves = get_pseudo_moves(board, pos)
+    # Get the pseudo moves ready for testing
+    pseudo_moves = get_pseudo_moves(board, pos, en_passant_target, castling_rights)
     legal_moves: list[tuple[int, int]] = []
     
     color = base.get_piece_color(board, pos)
-    if not color: return [] # If there's no color, there's no piece and thus no possible moves
+    if not color: return []
     
     # Simulate each move
     for target in pseudo_moves:
-        # We need a deep copy so our board isn't destroyed. Lists are weird in python. I am not going to use the copy library though. 
-        temp_board = [row[:] for row in board]
+        # Lists are dumb. They need deep copy otherwise my board would be messed up. And I will definitely not use an extra import for no reason
+        temp_board = [row[:] for row in board] # Creates a list and populates it with the rows inside board. row[:] prevents a shallow copy.
         
-        # Simulating the move
         piece = temp_board[pos[0]][pos[1]]
         temp_board[target[0]][target[1]] = piece
         temp_board[pos[0]][pos[1]] = "+"
@@ -162,3 +163,43 @@ def get_legal_moves(board: list[list[str]], pos: tuple[int, int]) -> list[tuple[
             legal_moves.append(target)
             
     return legal_moves
+
+def get_game_state(board: list[list[str]], color: str, en_passant_target: str, castling_rights: str) -> str:
+    """
+    Checks the current state of the game for the given color.
+
+    Logic:
+        We loop through EVERY piece belonging to 'color'. Heavy.
+        We calculate their legal moves.
+        If the total number of legal moves for the entire team is 0:
+            - If King is in check -> CHECKMATE
+            - If King is NOT in check -> STALEMATE
+        Otherwise -> PLAYING
+    
+    Args:
+        board: The board list.
+        color: Who's turn is it?
+        en_passant_target, castling_rights: Needed for move generation.
+    Returns:
+        str: "CHECKMATE", "STALEMATE", or "PLAYING"
+    """
+    has_legal_moves = False
+    
+    # Loop through the board to find all friendly pieces
+    for r in range(8):
+        for c in range(8):
+            if base.is_friendly(board, (r, c), color):
+                moves = get_legal_moves(board, (r, c), en_passant_target, castling_rights)
+                if len(moves) > 0:
+                    has_legal_moves = True
+                    break # We found at least one move, so game continues
+        if has_legal_moves: break # Prevents useless looping
+        
+    if has_legal_moves:
+        return "PLAYING"
+    
+    # If no moves, check why
+    if is_king_in_check(board, color):
+        return "CHECKMATE"
+    else:
+        return "STALEMATE"

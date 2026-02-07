@@ -1,4 +1,3 @@
-import sys
 from colorama import init
 
 # Core
@@ -22,17 +21,10 @@ def main():
     current_fen = start_fen
     
     # AI Setup
-    engine = None
     ai_color = None
     if config['mode'] == 'pve':
         # If Player is White, AI is Black.
         ai_color = 'b' if config['color'] == 'w' else 'w'
-        try:
-            engine = ai.Stockfish(int(config['difficulty']))
-        except FileNotFoundError as e:
-            print(f"\nNo stockfish found :(: {e}")
-            _ = input("Press Enter to exit...")
-            sys.exit()
 
     # UI State
     highlights = []
@@ -79,7 +71,7 @@ def main():
         if config['mode'] == 'pve' and turn == ai_color:
             print(f"  AI is thinking...")
             try:
-                best_move = engine.get_best_move(current_fen)
+                best_move = ai.get_best_move(current_fen)
                 if best_move:
                     current_fen = update_board_state(best_move, current_fen)
                     storage.save_snapshot(current_fen)

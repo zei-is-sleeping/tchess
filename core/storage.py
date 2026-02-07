@@ -1,6 +1,10 @@
 import pickle
+import os
 
-HISTORY_FILE = "data/history.dat"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+DATA_DIR = os.path.join(BASE_DIR, "data")
+HISTORY_FILE = os.path.join(DATA_DIR, "history.dat")
 
 def init_history(initial_fen: str):
     """

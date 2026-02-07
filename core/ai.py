@@ -7,7 +7,7 @@ def get_binary_path() -> str:
     It automatically detects if we are on Windows or Linux because
     I use linux and I want linux support.
     """
-    base_path = os.getcwd()
+    base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if os.name == 'nt': # Windows
         return os.path.join(base_path, "bin", "stockfish_win.exe")
     else: # Linux
@@ -46,7 +46,7 @@ def get_best_move(fen: str, difficulty: int = 1) -> str | None:
     # We open pipes to stdin (to talk to it) and stdout (to listen to it).
     process = subprocess.Popen(
         path,
-        universal_newlines=True,
+        text=True, # To actually get text from the output
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT
@@ -54,7 +54,7 @@ def get_best_move(fen: str, difficulty: int = 1) -> str | None:
 
     try:
         # Configure the Engine
-        # 'uci' tells the engine to wake up.
+        # 'uci' tells the engine to wake up. Stockfish recommends it.
         send_command(process, "uci")
         
         # Difficulty Configuration
